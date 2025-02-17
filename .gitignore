@@ -1,0 +1,7 @@
+node_modules
+uploads
+.env
+new_backend.js
+newer_backend.js
+newest_backend.js
+/db.js
