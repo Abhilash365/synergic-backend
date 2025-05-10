@@ -195,14 +195,12 @@ const collectionName = "paper_details";
 
 app.get("/questionpapers/:subject", async (req, res) => {
   try {
-    const { subject } = req.params;
+    let { subject } = req.params;
+    
+    // Replace underscores and trim spaces
+    subject = subject.replace(/_/g, " ").trim();
 
     const collection = db.collection(collectionName);
-
-    const firstDocument = await collection.findOne({});
-
-    const allSubjects = await collection.find({}, { projection: { subject: 1 } }).toArray();
-    console.log("📂 Subjects in DB:", allSubjects.map(doc => doc.subject));
 
     const papers = await collection.find({
       subject: { $regex: new RegExp(`^${subject}$`, "i") }
@@ -218,6 +216,7 @@ app.get("/questionpapers/:subject", async (req, res) => {
     res.status(500).json({ success: false, message: "Error retrieving data", error });
   }
 });
+
 
 // ✅ NEW: Update filename or subject
 app.put("/update/:id", async (req, res) => {
