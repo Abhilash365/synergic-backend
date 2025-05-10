@@ -198,8 +198,6 @@ app.get("/questionpapers/:subject", async (req, res) => {
   try {
     let { subject } = req.params;
     
-    // Replace underscores and trim spaces
-    subject = subject.replace(/_/g, " ").trim();
     
     await client.connect();
     const db = client.db(dbName);
