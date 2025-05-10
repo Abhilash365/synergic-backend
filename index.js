@@ -194,12 +194,15 @@ app.get("/subjects/:branch/:semester", async (req, res) => {
 const collectionName = "paper_details";
 
 app.get("/questionpapers/:subject", async (req, res) => {
+  const client = new MongoClient(mongoURI);
   try {
     let { subject } = req.params;
     
     // Replace underscores and trim spaces
     subject = subject.replace(/_/g, " ").trim();
-
+    
+    await client.connect();
+    const db = client.db(dbName);
     const collection = db.collection(collectionName);
 
     const papers = await collection.find({
