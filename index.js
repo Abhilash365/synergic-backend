@@ -8,7 +8,11 @@ const fs = require("fs");
 const { google } = require("googleapis");
 const cors = require("cors");
 const path = require("path");
-app.use(cors());
+app.use(cors({
+  origin: "http://localhost:5173", // your frontend URL
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true
+}));
 app.use(express.json());
 require('dotenv').config();
 
