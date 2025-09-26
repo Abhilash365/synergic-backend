@@ -82,11 +82,12 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
-    const { year, branch, semester, subject } = req.body;
-    if (!year || !branch || !semester || !subject) {
+    const { year, branch, semester, subject, contributorName } = req.body;
+    if (!year || !branch || !semester || !subject || !contributorName) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
+    // Upload to Google Drive
     const fileMetadata = { name: req.file.originalname };
     const media = { mimeType: req.file.mimetype, body: fs.createReadStream(req.file.path) };
 
@@ -109,13 +110,34 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     const result = await drive.files.get({ fileId: fileId, fields: "webViewLink" });
     const fileLink = result.data.webViewLink;
 
-    const newFile = new FileModel({
+    // Force Mongoose to use the 'synergic' database
+    const synergicConnection = mongoose.createConnection(mongoURI, {
+      dbName: "synergic",
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+
+    const fileSchema = new mongoose.Schema({
+      filename: String,
+      driveLink: String,
+      yearOfStudy: String,
+      branch: String,
+      semester: String,
+      subject: String,
+      contributorName: String,
+      uploadedAt: { type: Date, default: Date.now },
+    });
+
+    const FileModelSynergic = synergicConnection.model(request_details, fileSchema);
+
+    const newFile = new FileModelSynergic({
       filename: req.file.originalname,
       driveLink: fileLink,
       yearOfStudy: year,
       branch: branch,
       semester: semester,
       subject: subject,
+      contributorName: contributorName,
     });
 
     await newFile.save();
@@ -126,6 +148,7 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     res.status(500).json({ error: "Failed to upload file" });
   }
 });
+
 
 app.get("/questionpapers/:year/:subject", async (req, res) => {
   try {
