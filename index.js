@@ -196,9 +196,16 @@ app.get("/subjects/:branch/:semester", async (req, res) => {
 
     const { branch, semester } = req.params;
 
-    const result = await collection.findOne({}, {
-      projection: { _id: 0, [`BTech.${branch}.${semester}`]: 1 }
-    });
+    const result = await collection.findOne(
+  { _id: new ObjectId("67b735ba8d7b2c0826a84d4c") },
+  {
+    projection: {
+      _id: 0,
+      [`BTech.${branch}.${semester}`]: 1
+    }
+  }
+);
+
 
     console.log("Result:", JSON.stringify(result, null, 2));
 
