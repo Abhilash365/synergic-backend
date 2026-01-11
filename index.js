@@ -46,7 +46,7 @@ app.use(express.json())
 app.use('/api/', require("./routes/createUser"));
 
 const dbName = "synergic";
-const request_details = "request_details";
+const request_details = "paper_details";
 
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
