@@ -84,70 +84,93 @@ checkDriveAccess();
 
 app.post("/upload", upload.single("file"), async (req, res) => {
   try {
+    // 1. Validate File Existence
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
-    const {  subject, year, contributorName } = req.body;
-    if (!year || !subject || !contributorName) {
-      return res.status(400).json({ error: "Missing required fields" });
+    // 2. Destructure fields including the new 'type'
+    const { subject, year, type, contributorName } = req.body;
+    
+    if (!year || !subject || !type || !contributorName) {
+      // Cleanup uploaded file from local storage if validation fails
+      if (req.file.path) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: "Missing required fields: year, subject, type, or contributorName" });
     }
 
-    // Upload to Google Drive
+    // 3. Upload to Google Drive
     const fileMetadata = { name: req.file.originalname };
-    const media = { mimeType: req.file.mimetype, body: fs.createReadStream(req.file.path) };
+    const media = { 
+      mimeType: req.file.mimetype, 
+      body: fs.createReadStream(req.file.path) 
+    };
 
-    const response = await drive.files.create({
+    const driveResponse = await drive.files.create({
       requestBody: fileMetadata,
       media: media,
       fields: "id",
     });
 
-    if (!response.data.id) throw new Error("Failed to upload to Google Drive");
+    const fileId = driveResponse.data.id;
+    if (!fileId) throw new Error("Failed to generate File ID from Google Drive");
+
+    // 4. Delete temporary file from server immediately after upload
     fs.unlinkSync(req.file.path);
 
-    const fileId = response.data.id;
-
+    // 5. Set Permissions & Get Public Link
     await drive.permissions.create({
       fileId: fileId,
       requestBody: { role: "reader", type: "anyone" },
     });
 
-    const result = await drive.files.get({ fileId: fileId, fields: "webViewLink" });
-    const fileLink = result.data.webViewLink;
-
-    // Force Mongoose to use the 'synergic' database
-    const synergicConnection = mongoose.createConnection(mongoURI, {
-      dbName: "synergic",
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
+    const fileInfo = await drive.files.get({ 
+      fileId: fileId, 
+      fields: "webViewLink" 
     });
+    const fileLink = fileInfo.data.webViewLink;
 
+    // 6. Database Operations (Targeting 'synergic' DB)
+    const synergicDb = mongoose.connection.useDb("synergic");
+
+    // Define or use an existing Schema
     const fileSchema = new mongoose.Schema({
       filename: String,
       driveLink: String,
       yearOfStudy: String,
       subject: String,
+      type: String, // 'Mid Sem', 'End Sem', etc.
       contributorName: String,
       uploadedAt: { type: Date, default: Date.now },
     });
 
-    const FileModelSynergic = synergicConnection.model(request_details, fileSchema);
+    // Ensure model is correctly named as a string "request_details"
+    const FileModel = synergicDb.model("paper_details", fileSchema);
 
-    const newFile = new FileModelSynergic({
+    const newFile = new FileModel({
       filename: req.file.originalname,
       driveLink: fileLink,
       yearOfStudy: year,
       subject: subject,
+      type: type,
       contributorName: contributorName,
     });
 
     await newFile.save();
 
     res.json({ success: true, fileId: fileId, link: fileLink });
+
   } catch (error) {
+    // Cleanup local file if an error occurs during the Drive upload process
+    if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+    }
     console.error("❌ Upload error:", error.message);
-    res.status(500).json({ error: "Failed to upload file" });
+    res.status(500).json({ error: "Failed to upload file to system" });
   }
 });
+
+
+
+
+
 
 
 app.get("/questionpapers/:year/:subject", async (req, res) => {
