@@ -9,7 +9,7 @@ const { google } = require("googleapis");
 const cors = require("cors");
 const path = require("path");
 app.use(cors({
-  origin: "*", // your frontend URL
+  origin: "*", 
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true
 }));
@@ -86,8 +86,8 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
-    const { year, branch, semester, subject, contributorName } = req.body;
-    if (!year || !branch || !semester || !subject || !contributorName) {
+    const {  subject, year, contributorName } = req.body;
+    if (!year || !subject || !contributorName) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
@@ -125,8 +125,6 @@ app.post("/upload", upload.single("file"), async (req, res) => {
       filename: String,
       driveLink: String,
       yearOfStudy: String,
-      branch: String,
-      semester: String,
       subject: String,
       contributorName: String,
       uploadedAt: { type: Date, default: Date.now },
@@ -138,8 +136,6 @@ app.post("/upload", upload.single("file"), async (req, res) => {
       filename: req.file.originalname,
       driveLink: fileLink,
       yearOfStudy: year,
-      branch: branch,
-      semester: semester,
       subject: subject,
       contributorName: contributorName,
     });
@@ -268,6 +264,33 @@ app.put("/update/:id", async (req, res) => {
   } catch (error) {
     console.error("❌ Error updating file:", error.message);
     res.status(500).json({ success: false, message: "Failed to update file." });
+  }
+});
+
+
+// ... existing constants
+const paperCollection = "paper_details";
+app.get("/api/subjects", async (req, res) => {
+  try {
+    const db = mongoose.connection.useDb('synergic');
+    
+    const collection = db.collection("all_subjects");
+
+    const subjects = await collection
+      .find({})
+      .sort({ name: 1 }) 
+      .toArray();
+
+    console.log(`✅ Success: Found ${subjects.length} subjects.`);
+
+    if (!subjects || subjects.length === 0) {
+      return res.status(404).json({ message: "no_subjects" });
+    }
+
+    res.json(subjects);
+  } catch (error) {
+    console.error("❌ Error fetching subjects:", error);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
