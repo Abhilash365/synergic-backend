@@ -47,7 +47,7 @@ app.use('/api/', require("./routes/createUser"));
 
 const dbName = "synergic";
 const request_details = "paper_details";
-
+const saved_paper_details="saved_details"
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const REDIRECT_URI = process.env.REDIRECT_URI;
@@ -316,6 +316,66 @@ app.get("/api/subjects", async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
+
+
+
+// 1. Define the Schema
+const savedSchema = new mongoose.Schema({
+  user_id: { type: String, required: true, unique: true },
+  saved_papers: [{ type: String }] 
+});
+
+// 2. Define the Model using the 'synergic' DB connection (Matches your /upload logic)
+const SavedModel = mongoose.connection.useDb("synergic").model("saved_details", savedSchema, "saved_details");
+
+// 3. The Save Route
+app.post("/api/save-paper", async (req, res) => {
+  try {
+    const { user_id, paper_id } = req.body;
+
+    if (!user_id || !paper_id) {
+      return res.status(400).json({ success: false, message: "Missing user_id or paper_id" });
+    }
+
+    // Upsert: true creates the doc if user_id doesn't exist
+    // $addToSet: pushes the paper_id into the array only if it's not already there
+    const updatedUser = await SavedModel.findOneAndUpdate(
+      { user_id: user_id },
+      { $addToSet: { saved_papers: paper_id } },
+      { new: true, upsert: true }
+    );
+
+    res.json({ 
+      success: true, 
+      message: "Paper saved successfully", 
+      saved_papers: updatedUser.saved_papers 
+    });
+
+  } catch (error) {
+    console.error("❌ Error saving paper:", error.message);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+
+app.post("/api/unsave-paper", async (req, res) => {
+  try {
+    const { user_id, paper_id } = req.body;
+
+    const updatedUser = await SavedModel.findOneAndUpdate(
+      { user_id: user_id },
+      { $pull: { saved_papers: paper_id } }, // $pull removes item from array
+      { new: true }
+    );
+
+    res.json({ success: true, saved_papers: updatedUser?.saved_papers || [] });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+
 
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`)
