@@ -346,8 +346,6 @@ app.post("/api/save-paper", async (req, res) => {
       return res.status(400).json({ success: false, message: "Missing required fields" });
     }
 
-    // 1. Try to update an existing collection within the user's document
-    // $[elem] is a filtered positional operator that targets the specific collection
     const updatedUser = await SavedModel.findOneAndUpdate(
       { user_id: user_id, "saved_papers.collection_name": collection_name },
       { $addToSet: { "saved_papers.$[elem].papers": paper_id } },
@@ -404,6 +402,41 @@ app.get("/api/saved-papers/:user_id", async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
+
+
+
+
+app.get("/api/paper-details/:paper_id", async (req, res) => {
+  try {
+    const { paper_id } = req.params;
+
+    // We use findById because MongoDB stores the unique identifier in _id
+    // If your paper_id is a custom field, use: .findOne({ paper_id: paper_id })
+    const paper = await mongoose.connection
+      .useDb("synergic")
+      .collection("paper_details")
+      .findOne({ _id: new mongoose.Types.ObjectId(paper_id) });
+
+    if (!paper) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Paper not found" 
+      });
+    }
+
+    res.json({
+      success: true,
+      data: paper
+    });
+
+  } catch (error) {
+    console.error("❌ Error fetching paper details:", error.message);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+
+
 
 app.post("/api/unsave-paper", async (req, res) => {
   try {
