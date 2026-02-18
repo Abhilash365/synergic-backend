@@ -320,57 +320,123 @@ app.get("/api/subjects", async (req, res) => {
 
 
 
-// 1. Define the Schema
+// 1. Define the Nested Schema Structure
 const savedSchema = new mongoose.Schema({
   user_id: { type: String, required: true, unique: true },
-  saved_papers: [{ type: String }] 
-});
+  saved_papers: [
+    {
+      collection_name: { type: String, required: true },
+      papers: [{ type: String }] // Array of paper IDs (strings)
+    }
+  ]
+}, { timestamps: true }); // Good practice to track when things were saved
 
-// 2. Define the Model using the 'synergic' DB connection (Matches your /upload logic)
-const SavedModel = mongoose.connection.useDb("synergic").model("saved_details", savedSchema, "saved_details");
+// 2. Define the Model using the 'synergic' DB connection
+const SavedModel = mongoose.connection
+  .useDb("synergic")
+  .model("saved_details", savedSchema, "saved_details");
 
+module.exports = SavedModel;
 // 3. The Save Route
 app.post("/api/save-paper", async (req, res) => {
   try {
-    const { user_id, paper_id } = req.body;
+    const { user_id, collection_name, paper_id } = req.body;
 
-    if (!user_id || !paper_id) {
-      return res.status(400).json({ success: false, message: "Missing user_id or paper_id" });
+    if (!user_id || !collection_name || !paper_id) {
+      return res.status(400).json({ success: false, message: "Missing required fields" });
     }
 
-    // Upsert: true creates the doc if user_id doesn't exist
-    // $addToSet: pushes the paper_id into the array only if it's not already there
+    // 1. Try to update an existing collection within the user's document
+    // $[elem] is a filtered positional operator that targets the specific collection
     const updatedUser = await SavedModel.findOneAndUpdate(
-      { user_id: user_id },
-      { $addToSet: { saved_papers: paper_id } },
-      { new: true, upsert: true }
+      { user_id: user_id, "saved_papers.collection_name": collection_name },
+      { $addToSet: { "saved_papers.$[elem].papers": paper_id } },
+      { 
+        arrayFilters: [{ "elem.collection_name": collection_name }],
+        new: true 
+      }
     );
 
-    res.json({ 
-      success: true, 
-      message: "Paper saved successfully", 
-      saved_papers: updatedUser.saved_papers 
-    });
+    // 2. If updatedUser is null, it means either the user or the collection doesn't exist
+    if (!updatedUser) {
+      const newUserDoc = await SavedModel.findOneAndUpdate(
+        { user_id: user_id },
+        { 
+          $push: { 
+            saved_papers: { collection_name: collection_name, papers: [paper_id] } 
+          } 
+        },
+        { upsert: true, new: true }
+      );
+      
+      return res.json({ success: true, message: "New collection/user created", data: newUserDoc });
+    }
+
+    res.json({ success: true, message: "Paper added to collection", data: updatedUser });
 
   } catch (error) {
-    console.error("❌ Error saving paper:", error.message);
+    console.error("❌ Error:", error.message);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
 
+app.get("/api/saved-papers/:user_id", async (req, res) => {
+  try {
+    const { user_id } = req.params;
+
+    // Find the document where user_id matches
+    const userData = await SavedModel.findOne({ user_id: user_id });
+
+    if (!userData) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "No saved papers found for this user." 
+      });
+    }
+
+    res.json({
+      success: true,
+      data: userData.saved_papers
+    });
+
+  } catch (error) {
+    console.error("❌ Error fetching papers:", error.message);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
 
 app.post("/api/unsave-paper", async (req, res) => {
   try {
-    const { user_id, paper_id } = req.body;
+    const { user_id, collection_name, paper_id } = req.body;
 
+    if (!user_id || !collection_name || !paper_id) {
+      return res.status(400).json({ success: false, message: "Missing required fields" });
+    }
+
+    // $pull from the 'papers' array inside the specific collection object
     const updatedUser = await SavedModel.findOneAndUpdate(
-      { user_id: user_id },
-      { $pull: { saved_papers: paper_id } }, // $pull removes item from array
+      { 
+        user_id: user_id, 
+        "saved_papers.collection_name": collection_name 
+      },
+      { 
+        $pull: { "saved_papers.$.papers": paper_id } 
+      },
       { new: true }
     );
 
-    res.json({ success: true, saved_papers: updatedUser?.saved_papers || [] });
+    if (!updatedUser) {
+      return res.status(404).json({ success: false, message: "User or collection not found" });
+    }
+
+    res.json({ 
+      success: true, 
+      message: "Paper removed successfully", 
+      data: updatedUser.saved_papers 
+    });
+
   } catch (error) {
+    console.error("❌ Error unsaving paper:", error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 });
