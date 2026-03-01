@@ -404,8 +404,6 @@ app.get("/api/saved-papers/:user_id", async (req, res) => {
 });
 
 
-
-
 app.get("/api/paper-details/:paper_id", async (req, res) => {
   try {
     const { paper_id } = req.params;
