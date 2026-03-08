@@ -6,8 +6,10 @@ const { MongoClient } = require("mongodb");
 const multer = require("multer");
 const fs = require("fs");
 const { google } = require("googleapis");
+const nodemailer = require('nodemailer');
 const cors = require("cors");
 const path = require("path");
+const { Resend } = require('resend');
 app.use(cors({
   origin: "*", 
   methods: ["GET", "POST", "PUT", "DELETE"],
@@ -81,6 +83,55 @@ async function checkDriveAccess() {
   }
 }
 checkDriveAccess();
+
+
+const transporter = nodemailer.createTransport({
+    host: "74.125.204.108", // This is a direct IPv4 for smtp.gmail.com,
+    port: 587,
+    secure: false, 
+    // This line forces Node to use IPv4
+    family: 4, 
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+    },
+    tls: {
+        rejectUnauthorized: false
+    }
+});
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+app.post('/api/contact', async (req, res) => {
+    const { name, email, subject, message } = req.body;
+
+    // Simple validation
+    if (!name || !email || !message) {
+        return res.status(400).json({ success: false, error: "Missing fields" });
+    }
+
+    try {
+        const data = await resend.emails.send({
+            from: 'onboarding@resend.dev', // Use this exactly for the free tier
+            to: process.env.MY_RECEIVING_EMAIL,
+            subject: `Contact Form: ${subject || 'No Subject'}`,
+            html: `
+                <h3>New Message from Synergic Contact Form</h3>
+                <p><strong>Name:</strong> ${name}</p>
+                <p><strong>User Email:</strong> ${email}</p>
+                <p><strong>Message:</strong></p>
+                <p>${message}</p>
+            `
+        });
+
+        res.status(200).json({ success: true, id: data.id });
+    } catch (error) {
+        console.error("Resend Error:", error);
+        res.status(500).json({ success: false, error: "Failed to send email" });
+    }
+});
+
+const PORT = 5001;
+app.listen(PORT, () => console.log(`Backend running on http://localhost:${PORT}`));
 
 app.post("/upload", upload.single("file"), async (req, res) => {
   try {
@@ -382,7 +433,6 @@ app.get("/api/saved-papers/:user_id", async (req, res) => {
   try {
     const { user_id } = req.params;
 
-    // Find the document where user_id matches
     const userData = await SavedModel.findOne({ user_id: user_id });
 
     if (!userData) {
@@ -471,6 +521,14 @@ app.post("/api/unsave-paper", async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
+
+
+
+
+
+
+
 
 
 
